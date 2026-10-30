@@ -28,7 +28,7 @@ public class CategoryController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<CategoryWithMoviesDto> getById(@PathVariable Long id) {
+    public ResponseEntity<CategoryWithMoviesDto> getById(@PathVariable String id) {
         return ResponseEntity.ok(categoryService.findById(id));
     }
 

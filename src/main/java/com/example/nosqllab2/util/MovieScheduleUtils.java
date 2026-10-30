@@ -1,6 +1,6 @@
 package com.example.nosqllab2.util;
 
-import com.example.nosqllab2.entity.Movie;
+import com.example.nosqllab2.document.MovieDocument;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -19,11 +19,11 @@ public final class MovieScheduleUtils {
     }
 
     // в кинотеатре один зал, поэтому новый показ не должен пересекаться по времени с уже запланированными
-    public static boolean hasTimeConflict(LocalDateTime newShowDate, int newDuration, List<Movie> movies) {
+    public static boolean hasTimeConflict(LocalDateTime newShowDate, int newDuration, List<MovieDocument> movies) {
         LocalDateTime newEnd = newShowDate.plusMinutes(newDuration);
 
         return movies.stream().anyMatch(movie -> {
-            LocalDateTime existingStart = movie.getShowDate();
+            LocalDateTime existingStart = ShowDateParser.fromStoredValue(movie.getShowDate());
             LocalDateTime existingEnd = existingStart.plusMinutes(movie.getDuration());
 
             return newShowDate.isBefore(existingEnd) && newEnd.isAfter(existingStart);

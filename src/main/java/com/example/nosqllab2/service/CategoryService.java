@@ -3,11 +3,11 @@ package com.example.nosqllab2.service;
 import com.example.nosqllab2.dto.request.create.CreateCategoryDto;
 import com.example.nosqllab2.dto.response.CategoryResponseDto;
 import com.example.nosqllab2.dto.response.CategoryWithMoviesDto;
-import com.example.nosqllab2.entity.Category;
+import com.example.nosqllab2.document.CategoryDocument;
 import com.example.nosqllab2.exception.custom.EntityAlreadyExistsException;
 import com.example.nosqllab2.exception.custom.EntityNotFoundException;
 import com.example.nosqllab2.mapper.CategoryMapper;
-import com.example.nosqllab2.repository.CategoryRepository;
+import com.example.nosqllab2.repository.firestore.CategoryDocumentRepository;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -22,13 +22,13 @@ public class CategoryService {
     private static final String CATEGORY_CACHE_KEY_PREFIX = "category:";
     private static final Duration CATEGORY_CACHE_TTL = Duration.ofMinutes(5);
 
-    private final CategoryRepository categoryRepository;
+    private final CategoryDocumentRepository categoryRepository;
     private final CategoryMapper categoryMapper;
     private final RedisService redisService;
     private final ObjectMapper objectMapper;
 
     public CategoryService(
-            CategoryRepository categoryRepository,
+            CategoryDocumentRepository categoryRepository,
             CategoryMapper categoryMapper,
             RedisService redisService,
             ObjectMapper objectMapper
@@ -50,13 +50,18 @@ public class CategoryService {
             throw new EntityAlreadyExistsException("Категория с таким названием уже существует");
         }
 
-        Category category = new Category();
+        CategoryDocument category = new CategoryDocument();
         category.setName(dto.name());
 
-        return categoryMapper.toDto(categoryRepository.save(category));
+        // existsByName не спасает от двух одновременных запросов, окончательно имя занимается атомарно при записи
+        if (!categoryRepository.create(category)) {
+            throw new EntityAlreadyExistsException("Категория с таким названием уже существует");
+        }
+
+        return categoryMapper.toDto(category);
     }
 
-    public CategoryWithMoviesDto findById(Long id) {
+    public CategoryWithMoviesDto findById(String id) {
         String cacheKey = CATEGORY_CACHE_KEY_PREFIX + id;
 
         CategoryWithMoviesDto cachedCategory = readFromCache(cacheKey);
@@ -72,8 +77,8 @@ public class CategoryService {
         return category;
     }
 
-    public Category getEntityByName(String name) {
-        Optional<Category> optionalCategory = categoryRepository.findByName(name);
+    public CategoryDocument getEntityByName(String name) {
+        Optional<CategoryDocument> optionalCategory = categoryRepository.findByName(name);
 
         if (optionalCategory.isEmpty()) {
             throw new EntityNotFoundException("Категория " + name + " не найдена");
@@ -82,8 +87,8 @@ public class CategoryService {
         return optionalCategory.get();
     }
 
-    private Category getEntityById(Long id) {
-        Optional<Category> optionalCategory = categoryRepository.findWithMoviesById(id);
+    private CategoryDocument getEntityById(String id) {
+        Optional<CategoryDocument> optionalCategory = categoryRepository.findWithMoviesById(id);
 
         if (optionalCategory.isEmpty()) {
             throw new EntityNotFoundException("Категория с id " + id + " не найдена");

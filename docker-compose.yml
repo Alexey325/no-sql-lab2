@@ -8,6 +8,11 @@ services:
   firestore:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
     container_name: nosqllab2-firestore
-    command: gcloud emulators firestore start --host-port=0.0.0.0:8080 --project=nosqllab2-local
+    # запуск с сохранением данных в firestore-data, подробности в firestore/emulator.sh
+    command: sh /firestore/emulator.sh
+    volumes:
+      - ./firestore:/firestore
+      - ./firestore-data:/data
+    stop_grace_period: 30s
     ports:
       - "8080:8080"

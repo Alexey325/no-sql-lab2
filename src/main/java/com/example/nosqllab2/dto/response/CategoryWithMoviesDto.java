@@ -5,7 +5,7 @@ import com.example.nosqllab2.dto.ref.MovieRefDto;
 import java.util.List;
 
 public record CategoryWithMoviesDto(
-        Long id,
+        String id,
         String name,
         List<MovieRefDto> movies
 ) {

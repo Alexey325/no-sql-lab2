@@ -2,14 +2,22 @@ package com.example.nosqllab2.mapper;
 
 import com.example.nosqllab2.dto.ref.CategoryRefDto;
 import com.example.nosqllab2.dto.response.MovieResponseDto;
-import com.example.nosqllab2.entity.Category;
-import com.example.nosqllab2.entity.Movie;
+import com.example.nosqllab2.document.MovieDocument;
+import com.example.nosqllab2.util.ShowDateParser;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 
-@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR)
-public interface MovieMapper {
-    MovieResponseDto toDto(Movie movie);
+import java.time.LocalDateTime;
 
-    CategoryRefDto toRefDto(Category category);
+@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR, imports = CategoryRefDto.class)
+public interface MovieMapper {
+
+    // категория в документе фильма денормализована в два поля
+    @Mapping(target = "category", expression = "java(new CategoryRefDto(movie.getCategoryId(), movie.getCategoryName()))")
+    MovieResponseDto toDto(MovieDocument movie);
+
+    default LocalDateTime toShowDate(String value) {
+        return ShowDateParser.fromStoredValue(value);
+    }
 }

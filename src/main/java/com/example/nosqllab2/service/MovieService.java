@@ -6,26 +6,30 @@ import com.example.nosqllab2.dto.response.MovieResponseDto;
 import com.example.nosqllab2.dto.response.schedule.EditingNoticeDto;
 import com.example.nosqllab2.dto.response.schedule.MovieScheduleDto;
 import com.example.nosqllab2.dto.response.schedule.ScheduleResponseDto;
-import com.example.nosqllab2.entity.Category;
-import com.example.nosqllab2.entity.Movie;
+import com.example.nosqllab2.document.CategoryDocument;
+import com.example.nosqllab2.document.MovieDocument;
 import com.example.nosqllab2.exception.custom.EntityNotFoundException;
 import com.example.nosqllab2.exception.custom.ScheduleConflictException;
 import com.example.nosqllab2.mapper.MovieMapper;
-import com.example.nosqllab2.repository.MovieRepository;
+import com.example.nosqllab2.repository.firestore.CategoryDocumentRepository;
+import com.example.nosqllab2.repository.firestore.MovieDocumentRepository;
 import com.example.nosqllab2.util.MovieScheduleUtils;
 import com.example.nosqllab2.util.ShowDateParser;
+import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.WriteBatch;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+
+import static com.example.nosqllab2.util.FirestoreUtils.await;
 
 @Service
 public class MovieService {
@@ -34,7 +38,9 @@ public class MovieService {
     private static final String MOVIES_CACHE_KEY = "movies:all";
     private static final String EDITING_FLAG_PREFIX = "editing:";
 
-    private final MovieRepository movieRepository;
+    private final Firestore firestore;
+    private final MovieDocumentRepository movieRepository;
+    private final CategoryDocumentRepository categoryRepository;
     private final CategoryService categoryService;
     private final NotificationService notificationService;
     private final RedisService redisService;
@@ -44,7 +50,9 @@ public class MovieService {
     private final Duration propagationDelay;
 
     public MovieService(
-            MovieRepository movieRepository,
+            Firestore firestore,
+            MovieDocumentRepository movieRepository,
+            CategoryDocumentRepository categoryRepository,
             CategoryService categoryService,
             NotificationService notificationService,
             RedisService redisService,
@@ -53,7 +61,9 @@ public class MovieService {
             ObjectMapper objectMapper,
             @Value("${app.schedule.propagation-delay-ms}") long propagationDelayMs
     ) {
+        this.firestore = firestore;
         this.movieRepository = movieRepository;
+        this.categoryRepository = categoryRepository;
         this.categoryService = categoryService;
         this.notificationService = notificationService;
         this.redisService = redisService;
@@ -86,13 +96,12 @@ public class MovieService {
         return new MovieScheduleDto(movies);
     }
 
-    public MovieResponseDto findById(Long id) {
+    public MovieResponseDto findById(String id) {
         return movieMapper.toDto(getEntityById(id));
     }
 
-    @Transactional
     public MovieResponseDto addMovie(CreateMovieDto dto) {
-        Category category = categoryService.getEntityByName(dto.category());
+        CategoryDocument category = categoryService.getEntityByName(dto.category());
 
         LocalDateTime showDate = ShowDateParser.parse(dto.showDate());
         String dateKey = ShowDateParser.toDateKey(showDate);
@@ -102,37 +111,41 @@ public class MovieService {
         try {
             checkTimeIsFree(showDate, dto.duration(), null);
 
-            Movie movie = new Movie();
+            MovieDocument movie = new MovieDocument();
             movie.setTitle(dto.title());
             movie.setDescription(dto.description());
-            movie.setShowDate(showDate);
+            movie.setShowDate(ShowDateParser.toStoredValue(showDate));
             movie.setDuration(dto.duration());
-            movie.setCategory(category);
+            movie.setCategoryId(category.getId());
+            movie.setCategoryName(category.getName());
 
-            Movie savedMovie = movieRepository.save(movie);
+            // фильм и его копия в категории пишутся одним пакетом: либо оба, либо ничего
+            WriteBatch batch = firestore.batch();
+            movieRepository.save(batch, movie);
+            categoryRepository.putMovieCopy(batch, movie);
+            await(batch.commit());
 
             notificationService.scheduleNotification(
                     "Премьера дня",
-                    "Сегодня в " + dto.showDate() + " показываем фильм «" + savedMovie.getTitle() + "».",
-                    savedMovie.getShowDate()
+                    "Сегодня в " + dto.showDate() + " показываем фильм «" + movie.getTitle() + "».",
+                    showDate
             );
 
             redisService.delete(MOVIES_CACHE_KEY);
 
-            return movieMapper.toDto(savedMovie);
+            return movieMapper.toDto(movie);
         } finally {
             redisLockService.release(lock);
         }
     }
 
-    @Transactional
-    public MovieResponseDto updateMovie(Long id, UpdateMovieDto dto) {
-        Movie movie = getEntityById(id);
+    public MovieResponseDto updateMovie(String id, UpdateMovieDto dto) {
+        MovieDocument movie = getEntityById(id);
 
         LocalDateTime showDate = ShowDateParser.parse(dto.showDate());
         int duration = dto.duration() == null ? movie.getDuration() : dto.duration();
 
-        String oldDateKey = ShowDateParser.toDateKey(movie.getShowDate());
+        String oldDateKey = ShowDateParser.toDateKey(ShowDateParser.fromStoredValue(movie.getShowDate()));
         String newDateKey = ShowDateParser.toDateKey(showDate);
         List<String> dateKeys = List.of(oldDateKey, newDateKey);
 
@@ -144,34 +157,42 @@ public class MovieService {
 
             checkTimeIsFree(showDate, duration, movie.getId());
 
-            movie.setShowDate(showDate);
+            movie.setShowDate(ShowDateParser.toStoredValue(showDate));
             movie.setDuration(duration);
 
-            Movie savedMovie = movieRepository.save(movie);
+            WriteBatch batch = firestore.batch();
+            movieRepository.save(batch, movie);
+            categoryRepository.putMovieCopy(batch, movie);
+            await(batch.commit());
 
             notificationService.scheduleNotification(
                     "Расписание изменено",
-                    "Фильм «" + savedMovie.getTitle() + "» перенесён на " + dto.showDate() + ".",
-                    savedMovie.getShowDate()
+                    "Фильм «" + movie.getTitle() + "» перенесён на " + dto.showDate() + ".",
+                    showDate
             );
 
             // свой узел инвалидирует кэш сразу, без задержки распространения
             redisService.delete(MOVIES_CACHE_KEY);
 
-            return movieMapper.toDto(savedMovie);
+            return movieMapper.toDto(movie);
         } finally {
             redisLockService.release(lock);
         }
     }
 
-    @Transactional
-    public void deleteMovie(Long id) {
-        movieRepository.delete(getEntityById(id));
+    public void deleteMovie(String id) {
+        MovieDocument movie = getEntityById(id);
+
+        WriteBatch batch = firestore.batch();
+        movieRepository.delete(batch, movie);
+        categoryRepository.removeMovieCopy(batch, movie);
+        await(batch.commit());
+
         redisService.delete(MOVIES_CACHE_KEY);
     }
 
-    private Movie getEntityById(Long id) {
-        Optional<Movie> optionalMovie = movieRepository.findWithCategoryById(id);
+    private MovieDocument getEntityById(String id) {
+        Optional<MovieDocument> optionalMovie = movieRepository.findWithCategoryById(id);
 
         if (optionalMovie.isEmpty()) {
             throw new EntityNotFoundException("Фильм с id " + id + " не найден");
@@ -181,10 +202,10 @@ public class MovieService {
     }
 
     // в кинотеатре один зал, показы дня не должны пересекаться
-    private void checkTimeIsFree(LocalDateTime showDate, int duration, Long movieIdToSkip) {
+    private void checkTimeIsFree(LocalDateTime showDate, int duration, String movieIdToSkip) {
         MovieScheduleUtils.DayBounds dayBounds = MovieScheduleUtils.getDayBounds(showDate);
 
-        List<Movie> moviesOnThisDay = movieRepository
+        List<MovieDocument> moviesOnThisDay = movieRepository
                 .findAllByShowDateBetween(dayBounds.startOfDay(), dayBounds.endOfDay()).stream()
                 .filter(movie -> !movie.getId().equals(movieIdToSkip))
                 .toList();
