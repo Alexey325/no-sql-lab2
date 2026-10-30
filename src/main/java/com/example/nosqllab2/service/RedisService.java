@@ -6,12 +6,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.Set;
 
-/**
- * Работа с "своим" (локальным для этого узла) redis.
- * Под StringRedisTemplate лежит Jedis с пулом соединений на REDIS_POOL_SIZE штук:
- * каждая команда берёт свободное соединение из пула и возвращает его обратно,
- * поэтому подвисшая команда не блокирует остальные запросы приложения.
- */
+// локальный для узла redis, под StringRedisTemplate пул соединений Jedis на REDIS_POOL_SIZE штук
 @Service
 public class RedisService {
 
@@ -38,7 +33,7 @@ public class RedisService {
         redisTemplate.delete(key);
     }
 
-    // keys оставлен в рамках лабы, но операция тяжелая, можно оптимизировать используя scan
+    // keys тяжёлый, вне лабы лучше scan
     public Set<String> keys(String pattern) {
         return redisTemplate.keys(pattern);
     }

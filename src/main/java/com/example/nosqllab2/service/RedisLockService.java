@@ -54,7 +54,7 @@ public class RedisLockService {
     public ScheduleLock acquireScheduleLock(List<String> dateKeys, Duration ttl) {
         List<RLock> acquiredLocks = new ArrayList<>();
 
-        // даты сортируются, чтобы два параллельных запроса на те же дни не встали в клинч
+        // сортировка дат, чтобы параллельные запросы не встали в клинч
         for (String dateKey : dateKeys.stream().distinct().sorted().toList()) {
             RLock redLock = redLockFor(dateKey);
 
@@ -98,7 +98,7 @@ public class RedisLockService {
         nodes.values().forEach(RedissonClient::shutdown);
     }
 
-    // RedissonRedLock, в отличие от getMultiLock, считает лок взятым по большинству голосов, а не по всем узлам
+    // RedLock, в отличие от getMultiLock, требует большинства узлов, а не всех
     @SuppressWarnings("deprecation")
     private RLock redLockFor(String dateKey) {
         RLock[] locks = nodes.values().stream()

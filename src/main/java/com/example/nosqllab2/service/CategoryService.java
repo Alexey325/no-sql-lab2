@@ -11,7 +11,6 @@ import com.example.nosqllab2.repository.CategoryRepository;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.List;
@@ -57,12 +56,6 @@ public class CategoryService {
         return categoryMapper.toDto(categoryRepository.save(category));
     }
 
-    /**
-     * Часто запрашиваемые категории кэшируются в redis по схеме cache-aside:
-     * при первом запросе категория читается из PostgreSQL и кладётся в кэш на 5 минут,
-     * при повторном отдаётся из кэша без обращения к БД.
-     */
-    @Transactional(readOnly = true)
     public CategoryWithMoviesDto findById(Long id) {
         String cacheKey = CATEGORY_CACHE_KEY_PREFIX + id;
 
@@ -109,7 +102,7 @@ public class CategoryService {
         try {
             return objectMapper.readValue(cached, CategoryWithMoviesDto.class);
         } catch (JacksonException ex) {
-            // битое значение в кэше не должно ломать запрос — читаем из БД и перезапишем кэш
+            // битый кэш не должен ломать запрос
             redisService.delete(cacheKey);
             return null;
         }

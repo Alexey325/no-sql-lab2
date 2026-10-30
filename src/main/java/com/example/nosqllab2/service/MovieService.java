@@ -63,11 +63,7 @@ public class MovieService {
         this.propagationDelay = Duration.ofMillis(propagationDelayMs);
     }
 
-    /**
-     * Расписание кэшируется на каждом узле по схеме cache-aside с TTL, равным задержке распространения.
-     * Пока хоть один день расписания правится (жив флаг editing:*), расписание не отдаётся:
-     * узел ещё не гарантирует свежие данные.
-     */
+    // Пока хоть один день расписания правится (жив флаг editing:*)
     public ScheduleResponseDto findAllMovies() {
         Set<String> editingKeys = redisService.keys(EDITING_FLAG_PREFIX + "*");
 
@@ -143,7 +139,7 @@ public class MovieService {
         RedisLockService.ScheduleLock lock = redisLockService.acquireScheduleLock(dateKeys, LOCK_TTL);
 
         try {
-            // флаг правок уходит на чужие узлы сразу после захвата лока, ещё до записи в PostgreSQL
+            // флаг правок уходит на чужие узлы до записи в PostgreSQL
             redisLockService.broadcastEditingFlag(dateKeys, propagationDelay);
 
             checkTimeIsFree(showDate, duration, movie.getId());
@@ -159,7 +155,7 @@ public class MovieService {
                     savedMovie.getShowDate()
             );
 
-            // узел, на котором проходило изменение, инвалидирует свой кэш сразу и видит актуальные данные без задержки
+            // свой узел инвалидирует кэш сразу, без задержки распространения
             redisService.delete(MOVIES_CACHE_KEY);
 
             return movieMapper.toDto(savedMovie);
@@ -184,7 +180,7 @@ public class MovieService {
         return optionalMovie.get();
     }
 
-    // в кинотеатре один зал, поэтому показы одного дня не должны пересекаться по времени
+    // в кинотеатре один зал, показы дня не должны пересекаться
     private void checkTimeIsFree(LocalDateTime showDate, int duration, Long movieIdToSkip) {
         MovieScheduleUtils.DayBounds dayBounds = MovieScheduleUtils.getDayBounds(showDate);
 

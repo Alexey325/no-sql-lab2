@@ -16,10 +16,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Уведомления о ближайших премьерах хранятся только в redis с TTL:
- * создаются за 3 часа до начала показа и автоматически удаляются после его начала.
- */
+// уведомления живут только в redis: создаются за 3 часа до показа, TTL до его начала
 @Service
 public class NotificationService {
 
@@ -53,7 +50,7 @@ public class NotificationService {
         Instant notificationInstant = showInstant.minus(NOTIFICATION_LEAD_TIME);
 
         if (!notificationInstant.isAfter(Instant.now())) {
-            // до показа осталось меньше 3 часов — уведомление создаётся сразу, но только если показ ещё не начался
+            // до показа меньше 3 часов — создаём сразу
             if (showInstant.isAfter(Instant.now())) {
                 createNotification(title, message, showInstant);
             }
@@ -83,7 +80,7 @@ public class NotificationService {
             try {
                 notifications.add(objectMapper.readValue(value, NotificationResponseDto.class));
             } catch (JacksonException ex) {
-                // битое значение пропускаем, остальные уведомления всё равно отдаём
+                // битое значение пропускаем
             }
         }
 
@@ -104,7 +101,7 @@ public class NotificationService {
                 LocalDateTime.now()
         );
 
-        // составной node-id:id вместо просто id, иначе уведомления разных узлов перезапишут друг друга
+        // node-id в ключе, иначе узлы перезапишут уведомления друг друга
         String key = NOTIFICATION_KEY_PREFIX + nodeId + ":" + notification.id();
 
         String payload;
