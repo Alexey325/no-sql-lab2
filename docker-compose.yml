@@ -4,3 +4,10 @@ services:
     container_name: nosqllab2-redis
     ports:
       - "6379:6379"
+
+  firestore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    container_name: nosqllab2-firestore
+    command: gcloud emulators firestore start --host-port=0.0.0.0:8080 --project=nosqllab2-local
+    ports:
+      - "8080:8080"

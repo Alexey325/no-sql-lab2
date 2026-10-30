@@ -34,6 +34,10 @@ dependencies {
     // отдельный клиент на каждый независимый redis-узел для кворумного лока (Redlock)
     implementation 'org.redisson:redisson:3.50.0'
 
+    // документное хранилище: из стартера берём только блокирующий бин Firestore, реактивные репозитории не используем
+    implementation platform('com.google.cloud:spring-cloud-gcp-dependencies:8.3.1')
+    implementation 'com.google.cloud:spring-cloud-gcp-starter-data-firestore'
+
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
@@ -48,6 +52,7 @@ dependencies {
 
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    runtimeOnly 'org.postgresql:postgresql'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
