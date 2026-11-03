@@ -4,6 +4,9 @@ import com.google.cloud.firestore.annotation.DocumentId;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Getter
 @Setter
 public class MovieDocument {
@@ -22,4 +25,11 @@ public class MovieDocument {
     private String categoryId;
 
     private String categoryName;
+
+    private MovieState state;
+
+    private List<MovieStage> stages = new ArrayList<>();
+
+    // плоская копия имён этапов, по массиву строк работает array-contains
+    private List<String> stageNames = new ArrayList<>();
 }

@@ -9,6 +9,7 @@ import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.FieldPath;
 import com.google.cloud.firestore.FieldValue;
 import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.UpdateBuilder;
 import com.google.cloud.firestore.WriteBatch;
 import org.springframework.stereotype.Repository;
 
@@ -48,8 +49,6 @@ public class CategoryDocumentRepository {
         return category;
     }
 
-    // уникального индекса в Firestore нет, поэтому имя занимается документом categoryNames/<имя>
-    // в одном пакете с категорией: если имя уже занято, create падает и не записывается ничего
     public boolean create(CategoryDocument category) {
         DocumentReference ref;
 
@@ -65,12 +64,8 @@ public class CategoryDocumentRepository {
 
         try {
             await(batch.commit());
-        } catch (IllegalStateException ex) {
-            if (ex.getCause() instanceof AlreadyExistsException) {
-                return false;
-            }
-
-            throw ex;
+        } catch (AlreadyExistsException ex) {
+            return false;
         }
 
         category.setId(ref.getId());
@@ -107,8 +102,7 @@ public class CategoryDocumentRepository {
         return findByName(name).isPresent();
     }
 
-    // меняется одно поле map по пути movies.<id>, остальные копии в документе не перезаписываются
-    public void putMovieCopy(WriteBatch batch, MovieDocument movie) {
+    public void putMovieCopy(UpdateBuilder<?> writes, MovieDocument movie) {
         Map<String, Object> copy = Map.of(
                 "title", movie.getTitle(),
                 "description", movie.getDescription(),
@@ -116,22 +110,21 @@ public class CategoryDocumentRepository {
                 "duration", movie.getDuration()
         );
 
-        batch.update(
+        writes.update(
                 categories.document(movie.getCategoryId()),
                 FieldPath.of("movies", movie.getId()), copy,
                 FieldPath.of("movieIds"), FieldValue.arrayUnion(movie.getId())
         );
     }
 
-    public void removeMovieCopy(WriteBatch batch, MovieDocument movie) {
-        batch.update(
+    public void removeMovieCopy(UpdateBuilder<?> writes, MovieDocument movie) {
+        writes.update(
                 categories.document(movie.getCategoryId()),
                 FieldPath.of("movies", movie.getId()), FieldValue.delete(),
                 FieldPath.of("movieIds"), FieldValue.arrayRemove(movie.getId())
         );
     }
 
-    // имя становится id документа, а символ / в id запрещён
     private static String nameKey(String name) {
         return URLEncoder.encode(name, StandardCharsets.UTF_8);
     }

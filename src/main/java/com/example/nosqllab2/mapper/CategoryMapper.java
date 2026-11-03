@@ -23,7 +23,7 @@ public interface CategoryMapper {
 
     MovieRefDto toRefDto(String id, MovieCopy copy);
 
-    // копии лежат в map, где ключ — id фильма
+    // копии лежат в map
     default List<MovieRefDto> toMovieRefs(Map<String, MovieCopy> movies) {
         return movies.entrySet().stream()
                 .map(entry -> toRefDto(entry.getKey(), entry.getValue()))

@@ -16,6 +16,10 @@ public final class FirestoreUtils {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Запрос к Firestore прерван", ex);
         } catch (ExecutionException ex) {
+            if (ex.getCause() instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+
             throw new IllegalStateException("Ошибка Firestore: " + ex.getCause().getMessage(), ex.getCause());
         }
     }

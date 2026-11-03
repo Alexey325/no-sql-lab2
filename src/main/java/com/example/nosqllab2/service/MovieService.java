@@ -8,7 +8,10 @@ import com.example.nosqllab2.dto.response.schedule.MovieScheduleDto;
 import com.example.nosqllab2.dto.response.schedule.ScheduleResponseDto;
 import com.example.nosqllab2.document.CategoryDocument;
 import com.example.nosqllab2.document.MovieDocument;
+import com.example.nosqllab2.document.MovieStage;
+import com.example.nosqllab2.document.MovieState;
 import com.example.nosqllab2.exception.custom.EntityNotFoundException;
+import com.example.nosqllab2.exception.custom.InvalidStateTransitionException;
 import com.example.nosqllab2.exception.custom.ScheduleConflictException;
 import com.example.nosqllab2.mapper.MovieMapper;
 import com.example.nosqllab2.repository.firestore.CategoryDocumentRepository;
@@ -21,6 +24,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -37,6 +41,7 @@ public class MovieService {
     private static final Duration LOCK_TTL = Duration.ofSeconds(300);
     private static final String MOVIES_CACHE_KEY = "movies:all";
     private static final String EDITING_FLAG_PREFIX = "editing:";
+    private static final long SHOWN_CHECK_INTERVAL_MS = 60_000;
 
     private final Firestore firestore;
     private final MovieDocumentRepository movieRepository;
@@ -73,7 +78,6 @@ public class MovieService {
         this.propagationDelay = Duration.ofMillis(propagationDelayMs);
     }
 
-    // Пока хоть один день расписания правится (жив флаг editing:*)
     public ScheduleResponseDto findAllMovies() {
         Set<String> editingKeys = redisService.keys(EDITING_FLAG_PREFIX + "*");
 
@@ -118,8 +122,9 @@ public class MovieService {
             movie.setDuration(dto.duration());
             movie.setCategoryId(category.getId());
             movie.setCategoryName(category.getName());
+            movie.setState(MovieState.PLANNED);
+            addStage(movie, MovieState.PLANNED);
 
-            // фильм и его копия в категории пишутся одним пакетом: либо оба, либо ничего
             WriteBatch batch = firestore.batch();
             movieRepository.save(batch, movie);
             categoryRepository.putMovieCopy(batch, movie);
@@ -142,6 +147,8 @@ public class MovieService {
     public MovieResponseDto updateMovie(String id, UpdateMovieDto dto) {
         MovieDocument movie = getEntityById(id);
 
+        checkTransition(movie, MovieState.RESCHEDULED);
+
         LocalDateTime showDate = ShowDateParser.parse(dto.showDate());
         int duration = dto.duration() == null ? movie.getDuration() : dto.duration();
 
@@ -152,29 +159,36 @@ public class MovieService {
         RedisLockService.ScheduleLock lock = redisLockService.acquireScheduleLock(dateKeys, LOCK_TTL);
 
         try {
-            // флаг правок уходит на чужие узлы до записи в PostgreSQL
             redisLockService.broadcastEditingFlag(dateKeys, propagationDelay);
 
             checkTimeIsFree(showDate, duration, movie.getId());
 
-            movie.setShowDate(ShowDateParser.toStoredValue(showDate));
-            movie.setDuration(duration);
+            MovieDocument updated = await(firestore.runTransaction(tx -> {
+                MovieDocument current = movieRepository.findById(tx, id)
+                        .orElseThrow(() -> new EntityNotFoundException("Фильм с id " + id + " не найден"));
 
-            WriteBatch batch = firestore.batch();
-            movieRepository.save(batch, movie);
-            categoryRepository.putMovieCopy(batch, movie);
-            await(batch.commit());
+                checkTransition(current, MovieState.RESCHEDULED);
+
+                current.setShowDate(ShowDateParser.toStoredValue(showDate));
+                current.setDuration(duration);
+                current.setState(MovieState.RESCHEDULED);
+                addStage(current, MovieState.RESCHEDULED);
+
+                movieRepository.save(tx, current);
+                categoryRepository.putMovieCopy(tx, current);
+
+                return current;
+            }));
 
             notificationService.scheduleNotification(
                     "Расписание изменено",
-                    "Фильм «" + movie.getTitle() + "» перенесён на " + dto.showDate() + ".",
+                    "Фильм «" + updated.getTitle() + "» перенесён на " + dto.showDate() + ".",
                     showDate
             );
 
-            // свой узел инвалидирует кэш сразу, без задержки распространения
             redisService.delete(MOVIES_CACHE_KEY);
 
-            return movieMapper.toDto(movie);
+            return movieMapper.toDto(updated);
         } finally {
             redisLockService.release(lock);
         }
@@ -191,6 +205,65 @@ public class MovieService {
         redisService.delete(MOVIES_CACHE_KEY);
     }
 
+    @Scheduled(fixedDelay = SHOWN_CHECK_INTERVAL_MS)
+    public void markFinishedMoviesAsShown() {
+        LocalDateTime now = LocalDateTime.now();
+
+        List<MovieDocument> started = movieRepository.findAllByStateInAndShowDateBefore(
+                List.of(MovieState.PLANNED, MovieState.RESCHEDULED), now);
+
+        for (MovieDocument movie : started) {
+            if (isFinished(movie, now)) {
+                markAsShown(movie.getId(), now);
+            }
+        }
+    }
+
+    private void markAsShown(String id, LocalDateTime now) {
+        boolean changed = await(firestore.runTransaction(tx -> {
+            Optional<MovieDocument> current = movieRepository.findById(tx, id);
+
+            if (current.isEmpty() || !current.get().getState().canMoveTo(MovieState.SHOWN)
+                    || !isFinished(current.get(), now)) {
+                return false;
+            }
+
+            MovieDocument movie = current.get();
+            movie.setState(MovieState.SHOWN);
+            addStage(movie, MovieState.SHOWN);
+            movieRepository.save(tx, movie);
+
+            return true;
+        }));
+
+        if (changed) {
+            redisService.delete(MOVIES_CACHE_KEY);
+        }
+    }
+
+    private static boolean isFinished(MovieDocument movie, LocalDateTime now) {
+        LocalDateTime end = ShowDateParser.fromStoredValue(movie.getShowDate()).plusMinutes(movie.getDuration());
+        return !end.isAfter(now);
+    }
+
+    private static void checkTransition(MovieDocument movie, MovieState next) {
+        if (!movie.getState().canMoveTo(next)) {
+            throw new InvalidStateTransitionException(movie.getState(), next);
+        }
+    }
+
+    private static void addStage(MovieDocument movie, MovieState state) {
+        MovieStage stage = new MovieStage();
+        stage.setStage(state);
+        stage.setAt(ShowDateParser.toStoredValue(LocalDateTime.now()));
+
+        movie.getStages().add(stage);
+
+        if (!movie.getStageNames().contains(state.name())) {
+            movie.getStageNames().add(state.name());
+        }
+    }
+
     private MovieDocument getEntityById(String id) {
         Optional<MovieDocument> optionalMovie = movieRepository.findWithCategoryById(id);
 
@@ -201,7 +274,6 @@ public class MovieService {
         return optionalMovie.get();
     }
 
-    // в кинотеатре один зал, показы дня не должны пересекаться
     private void checkTimeIsFree(LocalDateTime showDate, int duration, String movieIdToSkip) {
         MovieScheduleUtils.DayBounds dayBounds = MovieScheduleUtils.getDayBounds(showDate);
 

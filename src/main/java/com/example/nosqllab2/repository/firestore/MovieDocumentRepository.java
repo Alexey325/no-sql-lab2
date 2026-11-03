@@ -1,13 +1,15 @@
 package com.example.nosqllab2.repository.firestore;
 
 import com.example.nosqllab2.document.MovieDocument;
+import com.example.nosqllab2.document.MovieState;
 import com.example.nosqllab2.util.ShowDateParser;
 import com.google.cloud.firestore.CollectionReference;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.Query;
-import com.google.cloud.firestore.WriteBatch;
+import com.google.cloud.firestore.Transaction;
+import com.google.cloud.firestore.UpdateBuilder;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -71,8 +73,27 @@ public class MovieDocumentRepository {
         await(movies.document(movie.getId()).delete());
     }
 
-    // запись в пакет: id выдаётся сразу, а в базу документ попадёт вместе с остальными записями пакета
-    public void save(WriteBatch batch, MovieDocument movie) {
+    // чтение внутри транзакции
+    public Optional<MovieDocument> findById(Transaction tx, String id) throws Exception {
+        DocumentSnapshot snapshot = tx.get(movies.document(id)).get();
+
+        if (!snapshot.exists()) {
+            return Optional.empty();
+        }
+
+        return Optional.ofNullable(snapshot.toObject(MovieDocument.class));
+    }
+
+    public List<MovieDocument> findAllByStateInAndShowDateBefore(List<MovieState> states, LocalDateTime moment) {
+        Query query = movies
+                .whereIn("state", states.stream().map(MovieState::name).toList())
+                .whereLessThanOrEqualTo("showDate", ShowDateParser.toStoredValue(moment));
+
+        return await(query.get()).toObjects(MovieDocument.class);
+    }
+
+    // запись в пакет или транзакцию
+    public void save(UpdateBuilder<?> writes, MovieDocument movie) {
         DocumentReference ref;
 
         if (movie.getId() == null) {
@@ -82,10 +103,10 @@ public class MovieDocumentRepository {
         }
 
         movie.setId(ref.getId());
-        batch.set(ref, movie);
+        writes.set(ref, movie);
     }
 
-    public void delete(WriteBatch batch, MovieDocument movie) {
-        batch.delete(movies.document(movie.getId()));
+    public void delete(UpdateBuilder<?> writes, MovieDocument movie) {
+        writes.delete(movies.document(movie.getId()));
     }
 }

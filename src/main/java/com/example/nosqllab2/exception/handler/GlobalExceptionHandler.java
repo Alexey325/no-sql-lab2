@@ -58,6 +58,13 @@ public class GlobalExceptionHandler {
         return problemDetail;
     }
 
+    @ExceptionHandler(InvalidStateTransitionException.class)
+    public ProblemDetail handleInvalidStateTransition(InvalidStateTransitionException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setTitle("Invalid state transition");
+        return problemDetail;
+    }
+
     // прилетает из фильтров через HandlerExceptionResolver: токена нет либо он не прошёл проверку
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleAuthentication(AuthenticationException ex) {
