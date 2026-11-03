@@ -53,7 +53,6 @@ public class CategoryService {
         CategoryDocument category = new CategoryDocument();
         category.setName(dto.name());
 
-        // existsByName не спасает от двух одновременных запросов, окончательно имя занимается атомарно при записи
         if (!categoryRepository.create(category)) {
             throw new EntityAlreadyExistsException("Категория с таким названием уже существует");
         }
@@ -75,6 +74,10 @@ public class CategoryService {
         writeToCache(cacheKey, category);
 
         return category;
+    }
+
+    public void deleteCache(String id) {
+        redisService.delete(CATEGORY_CACHE_KEY_PREFIX + id);
     }
 
     public CategoryDocument getEntityByName(String name) {
@@ -107,7 +110,6 @@ public class CategoryService {
         try {
             return objectMapper.readValue(cached, CategoryWithMoviesDto.class);
         } catch (JacksonException ex) {
-            // битый кэш не должен ломать запрос
             redisService.delete(cacheKey);
             return null;
         }

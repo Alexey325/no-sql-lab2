@@ -136,6 +136,7 @@ public class MovieService {
             );
 
             redisService.delete(MOVIES_CACHE_KEY);
+            categoryService.deleteCache(movie.getCategoryId());
 
             return movieMapper.toDto(movie);
         } finally {
@@ -185,6 +186,7 @@ public class MovieService {
             );
 
             redisService.delete(MOVIES_CACHE_KEY);
+            categoryService.deleteCache(updated.getCategoryId());
 
             return movieMapper.toDto(updated);
         } finally {
@@ -201,6 +203,7 @@ public class MovieService {
         await(batch.commit());
 
         redisService.delete(MOVIES_CACHE_KEY);
+        categoryService.deleteCache(movie.getCategoryId());
     }
 
     @Scheduled(fixedDelay = SHOWN_CHECK_INTERVAL_MS)
