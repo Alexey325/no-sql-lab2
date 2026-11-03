@@ -118,8 +118,7 @@ public class MovieService {
             MovieDocument movie = new MovieDocument();
             movie.setTitle(dto.title());
             movie.setDescription(dto.description());
-            movie.setShowDate(ShowDateParser.toStoredValue(showDate));
-            movie.setDuration(dto.duration());
+            setSchedule(movie, showDate, dto.duration());
             movie.setCategoryId(category.getId());
             movie.setCategoryName(category.getName());
             movie.setState(MovieState.PLANNED);
@@ -169,8 +168,7 @@ public class MovieService {
 
                 checkTransition(current, MovieState.RESCHEDULED);
 
-                current.setShowDate(ShowDateParser.toStoredValue(showDate));
-                current.setDuration(duration);
+                setSchedule(current, showDate, duration);
                 current.setState(MovieState.RESCHEDULED);
                 addStage(current, MovieState.RESCHEDULED);
 
@@ -209,13 +207,11 @@ public class MovieService {
     public void markFinishedMoviesAsShown() {
         LocalDateTime now = LocalDateTime.now();
 
-        List<MovieDocument> started = movieRepository.findAllByStateInAndShowDateBefore(
+        List<MovieDocument> finished = movieRepository.findAllByStateInAndEndDateBefore(
                 List.of(MovieState.PLANNED, MovieState.RESCHEDULED), now);
 
-        for (MovieDocument movie : started) {
-            if (isFinished(movie, now)) {
-                markAsShown(movie.getId(), now);
-            }
+        for (MovieDocument movie : finished) {
+            markAsShown(movie.getId(), now);
         }
     }
 
@@ -224,7 +220,7 @@ public class MovieService {
             Optional<MovieDocument> current = movieRepository.findById(tx, id);
 
             if (current.isEmpty() || !current.get().getState().canMoveTo(MovieState.SHOWN)
-                    || !isFinished(current.get(), now)) {
+                    || ShowDateParser.fromStoredValue(current.get().getEndDate()).isAfter(now)) {
                 return false;
             }
 
@@ -241,9 +237,10 @@ public class MovieService {
         }
     }
 
-    private static boolean isFinished(MovieDocument movie, LocalDateTime now) {
-        LocalDateTime end = ShowDateParser.fromStoredValue(movie.getShowDate()).plusMinutes(movie.getDuration());
-        return !end.isAfter(now);
+    private static void setSchedule(MovieDocument movie, LocalDateTime showDate, int duration) {
+        movie.setShowDate(ShowDateParser.toStoredValue(showDate));
+        movie.setDuration(duration);
+        movie.setEndDate(ShowDateParser.toStoredValue(showDate.plusMinutes(duration)));
     }
 
     private static void checkTransition(MovieDocument movie, MovieState next) {

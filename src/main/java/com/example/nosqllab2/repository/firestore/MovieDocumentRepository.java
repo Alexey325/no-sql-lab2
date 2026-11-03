@@ -84,10 +84,10 @@ public class MovieDocumentRepository {
         return Optional.ofNullable(snapshot.toObject(MovieDocument.class));
     }
 
-    public List<MovieDocument> findAllByStateInAndShowDateBefore(List<MovieState> states, LocalDateTime moment) {
+    public List<MovieDocument> findAllByStateInAndEndDateBefore(List<MovieState> states, LocalDateTime moment) {
         Query query = movies
                 .whereIn("state", states.stream().map(MovieState::name).toList())
-                .whereLessThanOrEqualTo("showDate", ShowDateParser.toStoredValue(moment));
+                .whereLessThanOrEqualTo("endDate", ShowDateParser.toStoredValue(moment));
 
         return await(query.get()).toObjects(MovieDocument.class);
     }

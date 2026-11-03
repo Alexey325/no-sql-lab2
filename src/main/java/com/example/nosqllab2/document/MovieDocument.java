@@ -22,6 +22,9 @@ public class MovieDocument {
 
     private int duration;
 
+    // showDate + duration
+    private String endDate;
+
     private String categoryId;
 
     private String categoryName;
@@ -30,6 +33,5 @@ public class MovieDocument {
 
     private List<MovieStage> stages = new ArrayList<>();
 
-    // плоская копия имён этапов, по массиву строк работает array-contains
     private List<String> stageNames = new ArrayList<>();
 }
