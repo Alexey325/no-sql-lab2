@@ -3,8 +3,10 @@ package com.example.nosqllab2.controller;
 import com.example.nosqllab2.dto.request.create.CreateMovieDto;
 import com.example.nosqllab2.dto.request.update.UpdateMovieDto;
 import com.example.nosqllab2.dto.response.MovieResponseDto;
+import com.example.nosqllab2.dto.response.MovieStatsDto;
 import com.example.nosqllab2.dto.response.schedule.ScheduleResponseDto;
 import com.example.nosqllab2.service.MovieService;
+import com.example.nosqllab2.service.MovieStatsService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,15 +18,22 @@ import org.springframework.web.bind.annotation.*;
 public class MovieController {
 
     private final MovieService movieService;
+    private final MovieStatsService movieStatsService;
 
-    public MovieController(MovieService movieService) {
+    public MovieController(MovieService movieService, MovieStatsService movieStatsService) {
         this.movieService = movieService;
+        this.movieStatsService = movieStatsService;
     }
 
     // отдаёт либо расписание, либо уведомление о том, что в расписании ведутся правки
     @GetMapping
     public ResponseEntity<ScheduleResponseDto> getAllMovies() {
         return ResponseEntity.ok(movieService.findAllMovies());
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<MovieStatsDto> getStats() {
+        return ResponseEntity.ok(movieStatsService.getStats());
     }
 
     @GetMapping("/{id}")

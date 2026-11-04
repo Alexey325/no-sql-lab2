@@ -47,6 +47,7 @@ public class MovieService {
     private final MovieDocumentRepository movieRepository;
     private final CategoryDocumentRepository categoryRepository;
     private final CategoryService categoryService;
+    private final MovieStatsService movieStatsService;
     private final NotificationService notificationService;
     private final RedisService redisService;
     private final RedisLockService redisLockService;
@@ -59,6 +60,7 @@ public class MovieService {
             MovieDocumentRepository movieRepository,
             CategoryDocumentRepository categoryRepository,
             CategoryService categoryService,
+            MovieStatsService movieStatsService,
             NotificationService notificationService,
             RedisService redisService,
             RedisLockService redisLockService,
@@ -70,6 +72,7 @@ public class MovieService {
         this.movieRepository = movieRepository;
         this.categoryRepository = categoryRepository;
         this.categoryService = categoryService;
+        this.movieStatsService = movieStatsService;
         this.notificationService = notificationService;
         this.redisService = redisService;
         this.redisLockService = redisLockService;
@@ -127,6 +130,7 @@ public class MovieService {
             WriteBatch batch = firestore.batch();
             movieRepository.save(batch, movie);
             categoryRepository.putMovieCopy(batch, movie);
+            movieStatsService.recordCreated(batch, movie.getState());
             await(batch.commit());
 
             notificationService.scheduleNotification(
@@ -169,12 +173,15 @@ public class MovieService {
 
                 checkTransition(current, MovieState.RESCHEDULED);
 
+                MovieState previousState = current.getState();
+
                 setSchedule(current, showDate, duration);
                 current.setState(MovieState.RESCHEDULED);
                 addStage(current, MovieState.RESCHEDULED);
 
                 movieRepository.save(tx, current);
                 categoryRepository.putMovieCopy(tx, current);
+                movieStatsService.recordTransition(tx, previousState, MovieState.RESCHEDULED);
 
                 return current;
             }));
@@ -195,15 +202,19 @@ public class MovieService {
     }
 
     public void deleteMovie(String id) {
-        MovieDocument movie = getEntityById(id);
+        MovieDocument deleted = await(firestore.runTransaction(tx -> {
+            MovieDocument current = movieRepository.findById(tx, id)
+                    .orElseThrow(() -> new EntityNotFoundException("Фильм с id " + id + " не найден"));
 
-        WriteBatch batch = firestore.batch();
-        movieRepository.delete(batch, movie);
-        categoryRepository.removeMovieCopy(batch, movie);
-        await(batch.commit());
+            movieRepository.delete(tx, current);
+            categoryRepository.removeMovieCopy(tx, current);
+            movieStatsService.recordDeleted(tx, current.getState());
+
+            return current;
+        }));
 
         redisService.delete(MOVIES_CACHE_KEY);
-        categoryService.deleteCache(movie.getCategoryId());
+        categoryService.deleteCache(deleted.getCategoryId());
     }
 
     @Scheduled(fixedDelay = SHOWN_CHECK_INTERVAL_MS)
@@ -228,9 +239,12 @@ public class MovieService {
             }
 
             MovieDocument movie = current.get();
+            MovieState previousState = movie.getState();
+
             movie.setState(MovieState.SHOWN);
             addStage(movie, MovieState.SHOWN);
             movieRepository.save(tx, movie);
+            movieStatsService.recordTransition(tx, previousState, MovieState.SHOWN);
 
             return true;
         }));
