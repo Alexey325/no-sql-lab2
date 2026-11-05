@@ -21,4 +21,6 @@ public class CategoryDocument {
     private List<String> movieIds = new ArrayList<>();
 
     private Map<String, MovieCopy> movies = new HashMap<>();
+
+    private int schemaVersion = SchemaVersion.CURRENT;
 }

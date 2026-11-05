@@ -1,5 +1,6 @@
 package com.example.nosqllab2.document;
 
+import com.google.cloud.Timestamp;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,7 +12,7 @@ public class MovieCopy {
 
     private String description;
 
-    private String showDate;
+    private Timestamp showDate;
 
     private int duration;
 }

@@ -1,6 +1,7 @@
 package com.example.nosqllab2.service;
 
 import com.example.nosqllab2.dto.response.NotificationResponseDto;
+import com.example.nosqllab2.util.ShowDateParser;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,7 +11,6 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -46,7 +46,7 @@ public class NotificationService {
     }
 
     public void scheduleNotification(String title, String message, LocalDateTime showDate) {
-        Instant showInstant = showDate.atZone(ZoneId.systemDefault()).toInstant();
+        Instant showInstant = showDate.atZone(ShowDateParser.ZONE).toInstant();
         Instant notificationInstant = showInstant.minus(NOTIFICATION_LEAD_TIME);
 
         if (!notificationInstant.isAfter(Instant.now())) {
@@ -98,7 +98,7 @@ public class NotificationService {
                 nextId.getAndIncrement(),
                 title,
                 message,
-                LocalDateTime.now()
+                ShowDateParser.now()
         );
 
         // node-id в ключе, иначе узлы перезапишут уведомления друг друга

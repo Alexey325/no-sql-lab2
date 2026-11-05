@@ -6,6 +6,7 @@ import com.example.nosqllab2.dto.ref.MovieRefDto;
 import com.example.nosqllab2.dto.response.CategoryResponseDto;
 import com.example.nosqllab2.dto.response.CategoryWithMoviesDto;
 import com.example.nosqllab2.util.ShowDateParser;
+import com.google.cloud.Timestamp;
 import org.mapstruct.Mapper;
 import org.mapstruct.ReportingPolicy;
 
@@ -31,7 +32,7 @@ public interface CategoryMapper {
                 .toList();
     }
 
-    default LocalDateTime toShowDate(String value) {
+    default LocalDateTime toShowDate(Timestamp value) {
         return ShowDateParser.fromStoredValue(value);
     }
 }

@@ -1,5 +1,6 @@
 package com.example.nosqllab2.document;
 
+import com.google.cloud.Timestamp;
 import com.google.cloud.firestore.annotation.DocumentId;
 import com.google.cloud.firestore.annotation.Exclude;
 import lombok.Getter;
@@ -19,12 +20,12 @@ public class MovieDocument {
 
     private String description;
 
-    private String showDate;
+    private Timestamp showDate;
 
     private int duration;
 
     // showDate + duration
-    private String endDate;
+    private Timestamp endDate;
 
     private String categoryId;
 
@@ -33,6 +34,8 @@ public class MovieDocument {
     private MovieStage lastStage;
 
     private List<MovieStage> stages = new ArrayList<>();
+
+    private int schemaVersion = SchemaVersion.CURRENT;
 
     @Exclude
     public MovieState getState() {

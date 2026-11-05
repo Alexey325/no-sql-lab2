@@ -247,7 +247,7 @@ public class MovieService {
 
     @Scheduled(fixedDelay = SHOWN_CHECK_INTERVAL_MS)
     public void markFinishedMoviesAsShown() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = ShowDateParser.now();
 
         List<MovieDocument> finished = movieRepository.findAllByStateInAndEndDateBefore(
                 List.of(MovieState.PLANNED, MovieState.RESCHEDULED), now);
@@ -296,7 +296,7 @@ public class MovieService {
     private static void addStage(MovieDocument movie, MovieState state) {
         MovieStage stage = new MovieStage();
         stage.setStage(state);
-        stage.setAt(ShowDateParser.toStoredValue(LocalDateTime.now()));
+        stage.setAt(ShowDateParser.toStoredValue(ShowDateParser.now()));
 
         movie.getStages().add(stage);
         movie.setLastStage(stage);

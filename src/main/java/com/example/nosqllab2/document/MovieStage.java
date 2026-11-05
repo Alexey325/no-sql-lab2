@@ -1,5 +1,6 @@
 package com.example.nosqllab2.document;
 
+import com.google.cloud.Timestamp;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -10,5 +11,5 @@ public class MovieStage {
 
     private MovieState stage;
 
-    private String at;
+    private Timestamp at;
 }
