@@ -1,6 +1,7 @@
 package com.example.nosqllab2.document;
 
 import com.google.cloud.firestore.annotation.DocumentId;
+import com.google.cloud.firestore.annotation.Exclude;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -29,9 +30,12 @@ public class MovieDocument {
 
     private String categoryName;
 
-    private MovieState state;
+    private MovieStage lastStage;
 
     private List<MovieStage> stages = new ArrayList<>();
 
-    private List<String> stageNames = new ArrayList<>();
+    @Exclude
+    public MovieState getState() {
+        return lastStage.getStage();
+    }
 }

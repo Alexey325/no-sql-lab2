@@ -86,10 +86,34 @@ public class MovieDocumentRepository {
 
     public List<MovieDocument> findAllByStateInAndEndDateBefore(List<MovieState> states, LocalDateTime moment) {
         Query query = movies
-                .whereIn("state", states.stream().map(MovieState::name).toList())
+                .whereIn("lastStage.stage", states.stream().map(MovieState::name).toList())
                 .whereLessThanOrEqualTo("endDate", ShowDateParser.toStoredValue(moment));
 
         return await(query.get()).toObjects(MovieDocument.class);
+    }
+
+    public Optional<DocumentSnapshot> findSnapshotById(String id) {
+        DocumentSnapshot snapshot = await(movies.document(id).get());
+
+        if (!snapshot.exists()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(snapshot);
+    }
+
+    public List<MovieDocument> search(List<MovieState> states, Query.Direction direction, DocumentSnapshot cursor, int limit) {
+        Query query = movies.orderBy("lastStage.at", direction);
+
+        if (states != null && !states.isEmpty()) {
+            query = query.whereIn("lastStage.stage", states.stream().distinct().map(MovieState::name).toList());
+        }
+
+        if (cursor != null) {
+            query = query.startAfter(cursor);
+        }
+
+        return await(query.limit(limit).get()).toObjects(MovieDocument.class);
     }
 
     // запись в пакет или транзакцию

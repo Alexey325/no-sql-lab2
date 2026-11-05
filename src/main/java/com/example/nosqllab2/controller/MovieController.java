@@ -1,17 +1,24 @@
 package com.example.nosqllab2.controller;
 
+import com.example.nosqllab2.document.MovieState;
 import com.example.nosqllab2.dto.request.create.CreateMovieDto;
 import com.example.nosqllab2.dto.request.update.UpdateMovieDto;
 import com.example.nosqllab2.dto.response.MovieResponseDto;
+import com.example.nosqllab2.dto.response.MovieSearchResponseDto;
 import com.example.nosqllab2.dto.response.MovieStatsDto;
 import com.example.nosqllab2.dto.response.schedule.ScheduleResponseDto;
 import com.example.nosqllab2.service.MovieService;
 import com.example.nosqllab2.service.MovieStatsService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/movies")
@@ -34,6 +41,16 @@ public class MovieController {
     @GetMapping("/stats")
     public ResponseEntity<MovieStatsDto> getStats() {
         return ResponseEntity.ok(movieStatsService.getStats());
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<MovieSearchResponseDto> search(
+            @RequestParam(required = false) List<MovieState> state,
+            @RequestParam(defaultValue = "desc") @Pattern(regexp = "asc|desc") String order,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
+            @RequestParam(required = false) String cursor
+    ) {
+        return ResponseEntity.ok(movieService.search(state, order, limit, cursor));
     }
 
     @GetMapping("/{id}")

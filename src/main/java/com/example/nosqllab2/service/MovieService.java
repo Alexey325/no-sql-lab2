@@ -3,6 +3,7 @@ package com.example.nosqllab2.service;
 import com.example.nosqllab2.dto.request.create.CreateMovieDto;
 import com.example.nosqllab2.dto.request.update.UpdateMovieDto;
 import com.example.nosqllab2.dto.response.MovieResponseDto;
+import com.example.nosqllab2.dto.response.MovieSearchResponseDto;
 import com.example.nosqllab2.dto.response.schedule.EditingNoticeDto;
 import com.example.nosqllab2.dto.response.schedule.MovieScheduleDto;
 import com.example.nosqllab2.dto.response.schedule.ScheduleResponseDto;
@@ -11,6 +12,7 @@ import com.example.nosqllab2.document.MovieDocument;
 import com.example.nosqllab2.document.MovieStage;
 import com.example.nosqllab2.document.MovieState;
 import com.example.nosqllab2.exception.custom.EntityNotFoundException;
+import com.example.nosqllab2.exception.custom.InvalidCursorException;
 import com.example.nosqllab2.exception.custom.InvalidStateTransitionException;
 import com.example.nosqllab2.exception.custom.ScheduleConflictException;
 import com.example.nosqllab2.mapper.MovieMapper;
@@ -18,7 +20,9 @@ import com.example.nosqllab2.repository.firestore.CategoryDocumentRepository;
 import com.example.nosqllab2.repository.firestore.MovieDocumentRepository;
 import com.example.nosqllab2.util.MovieScheduleUtils;
 import com.example.nosqllab2.util.ShowDateParser;
+import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.Query;
 import com.google.cloud.firestore.WriteBatch;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -107,6 +111,32 @@ public class MovieService {
         return movieMapper.toDto(getEntityById(id));
     }
 
+    public MovieSearchResponseDto search(List<MovieState> states, String order, int limit, String cursor) {
+        DocumentSnapshot cursorDocument = null;
+
+        if (cursor != null) {
+            cursorDocument = movieRepository.findSnapshotById(cursor)
+                    .orElseThrow(() -> new InvalidCursorException(cursor));
+        }
+
+        Query.Direction direction = Query.Direction.DESCENDING;
+
+        if (order.equals("asc")) {
+            direction = Query.Direction.ASCENDING;
+        }
+
+        List<MovieDocument> found = movieRepository.search(states, direction, cursorDocument, limit + 1);
+        List<MovieDocument> page = found.stream().limit(limit).toList();
+
+        String nextCursor = null;
+
+        if (found.size() > limit) {
+            nextCursor = page.getLast().getId();
+        }
+
+        return new MovieSearchResponseDto(page.stream().map(movieMapper::toDto).toList(), nextCursor);
+    }
+
     public MovieResponseDto addMovie(CreateMovieDto dto) {
         CategoryDocument category = categoryService.getEntityByName(dto.category());
 
@@ -124,7 +154,6 @@ public class MovieService {
             setSchedule(movie, showDate, dto.duration());
             movie.setCategoryId(category.getId());
             movie.setCategoryName(category.getName());
-            movie.setState(MovieState.PLANNED);
             addStage(movie, MovieState.PLANNED);
 
             WriteBatch batch = firestore.batch();
@@ -176,7 +205,6 @@ public class MovieService {
                 MovieState previousState = current.getState();
 
                 setSchedule(current, showDate, duration);
-                current.setState(MovieState.RESCHEDULED);
                 addStage(current, MovieState.RESCHEDULED);
 
                 movieRepository.save(tx, current);
@@ -241,7 +269,6 @@ public class MovieService {
             MovieDocument movie = current.get();
             MovieState previousState = movie.getState();
 
-            movie.setState(MovieState.SHOWN);
             addStage(movie, MovieState.SHOWN);
             movieRepository.save(tx, movie);
             movieStatsService.recordTransition(tx, previousState, MovieState.SHOWN);
@@ -272,10 +299,7 @@ public class MovieService {
         stage.setAt(ShowDateParser.toStoredValue(LocalDateTime.now()));
 
         movie.getStages().add(stage);
-
-        if (!movie.getStageNames().contains(state.name())) {
-            movie.getStageNames().add(state.name());
-        }
+        movie.setLastStage(stage);
     }
 
     private MovieDocument getEntityById(String id) {
