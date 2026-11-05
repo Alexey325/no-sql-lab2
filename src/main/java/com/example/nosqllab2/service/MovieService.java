@@ -111,7 +111,7 @@ public class MovieService {
         return movieMapper.toDto(getEntityById(id));
     }
 
-    public MovieSearchResponseDto search(List<MovieState> states, String order, int limit, String cursor) {
+    public MovieSearchResponseDto search(String categoryId, List<MovieState> states, String order, int limit, String cursor) {
         DocumentSnapshot cursorDocument = null;
 
         if (cursor != null) {
@@ -125,7 +125,7 @@ public class MovieService {
             direction = Query.Direction.ASCENDING;
         }
 
-        List<MovieDocument> found = movieRepository.search(states, direction, cursorDocument, limit + 1);
+        List<MovieDocument> found = movieRepository.search(categoryId, states, direction, cursorDocument, limit + 1);
         List<MovieDocument> page = found.stream().limit(limit).toList();
 
         String nextCursor = null;

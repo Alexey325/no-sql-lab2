@@ -102,8 +102,12 @@ public class MovieDocumentRepository {
         return Optional.of(snapshot);
     }
 
-    public List<MovieDocument> search(List<MovieState> states, Query.Direction direction, DocumentSnapshot cursor, int limit) {
+    public List<MovieDocument> search(String categoryId, List<MovieState> states, Query.Direction direction, DocumentSnapshot cursor, int limit) {
         Query query = movies.orderBy("lastStage.at", direction);
+
+        if (categoryId != null) {
+            query = query.whereEqualTo("categoryId", categoryId);
+        }
 
         if (states != null && !states.isEmpty()) {
             query = query.whereIn("lastStage.stage", states.stream().distinct().map(MovieState::name).toList());

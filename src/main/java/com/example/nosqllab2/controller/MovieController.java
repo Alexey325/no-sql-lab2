@@ -45,12 +45,13 @@ public class MovieController {
 
     @GetMapping("/search")
     public ResponseEntity<MovieSearchResponseDto> search(
+            @RequestParam(required = false) String categoryId,
             @RequestParam(required = false) List<MovieState> state,
             @RequestParam(defaultValue = "desc") @Pattern(regexp = "asc|desc") String order,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
             @RequestParam(required = false) String cursor
     ) {
-        return ResponseEntity.ok(movieService.search(state, order, limit, cursor));
+        return ResponseEntity.ok(movieService.search(categoryId, state, order, limit, cursor));
     }
 
     @GetMapping("/{id}")
