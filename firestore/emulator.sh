@@ -22,9 +22,9 @@ save_data() {
 IMPORT=$(latest_export)
 
 if [ -n "$IMPORT" ]; then
-    gcloud emulators firestore start --host-port=0.0.0.0:8080 --project=$PROJECT --import-data="$IMPORT" &
+    gcloud emulators firestore start --host-port=0.0.0.0:8080 --project=$PROJECT --rules=/firestore/firestore.rules --import-data="$IMPORT" &
 else
-    gcloud emulators firestore start --host-port=0.0.0.0:8080 --project=$PROJECT &
+    gcloud emulators firestore start --host-port=0.0.0.0:8080 --project=$PROJECT --rules=/firestore/firestore.rules &
 fi
 
 EMULATOR_PID=$!
